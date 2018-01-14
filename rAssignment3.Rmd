@@ -1,0 +1,158 @@
+---
+title: "rAssignment3"
+author: "Brian"
+date: "January 14, 2018"
+output: html_document
+---
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<style>
+  .right{
+    float: right;
+  }
+  img{
+    display:block;
+    margin: 0 auto;
+  
+  }
+  pre{
+    overflow-x: hidden;
+  }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(ggplot2)
+require(RColorBrewer)
+require(MASS)
+require(plyr)
+```
+
+<div class='jumbotron'>
+  <h2>Are Fewer Children born on Weekends?</h2>
+  <h4 class='right'>Analysis by Brian Weinfeld</h4>
+</div>
+
+<div class='page-header text-uppercase'>
+  <h3>The Claim</h3>
+</div>
+<div class='well'>
+  <p><span class='lead'>D</span>uring a recent discussion with new parents, they relayed to me an anecdote told to them by their doctor. The doctor had told them that more children were born during the     week than during the weekend. This idea immediately intrigued me as logically the day of the week should have no affect on when a child is born. I decided to investigate.
+  </p>
+  <p>I began by pulling data on births in the United States from 1969 to 1988. I removed the unneeded columns and then agregated the data to show the total number of births for each day of the week for each year.</p>
+</div>
+
+```{r}
+birthData <- read.table(file='C:\\Users\\Brian\\Desktop\\Births.csv', header=TRUE, sep=',', stringsAsFactors=FALSE)
+head(birthData,n=10)
+```
+
+```{r}
+workingData <- birthData[,c(5,9,3)]
+combinedBirthData <- aggregate(births ~ day_of_week + year, workingData, sum)[,c(2,1,3)]
+head(combinedBirthData,n=10)
+```
+
+<div class='well'>
+  <p><span class='lead'>I</span> then created a scatter plot of the data and drew a line through the mean of each day's data. Visual inspection of the graph seemed to indicate that there was a significant dip in births on Saturday and Sunday. I also plotted each year seperately in case one year's data was skewing the overall results. Visual inspection of that data supported the initial observation.</p>
+</div>
+
+```{r}
+original <- ggplot(combinedBirthData, aes(x=factor(day_of_week), y=births)) + geom_point(aes(color=factor(year))) + 
+  labs(title='Births By Day of Week (1969-1988) With Trend Line', caption='Data From: http://vincentarelbundock.github.io/Rdatasets/',x='Day Of Week', y='Births', color='Year')
+
+original + stat_summary(aes(y=births,group=1,size=2), fun.y=mean, geom='line',group=1, show.legend=FALSE) + scale_x_discrete(labels=c('Mon', 'Tues','Wed','Thurs','Fri','Sat','Sun')) 
+```
+
+```{r}
+original + facet_wrap(~year) + theme(legend.position='none') + scale_x_discrete(labels=c('M','T','W',"Th",'F','Sa','Su'))
+```
+
+<div class='page-header text-uppercase'>
+  <h3>Statistical Analysis</h3>
+</div>
+<div class='well'>
+  <p><span class='lead'>A</span>lthough visual inspection seemed to indicate a difference in birth rates it is important to perform a staistical test to ensure that this is the case. I performed a Chi-Squared Test  to see if there was a statistically significant difference between the average number of births for each day of the week across all the data.</p>
+  <p>With a p-value so small I can confidently say that there was a statistically significant difference between the birth rates of children when compared to the day of the week.<p>
+</div>
+
+
+```{r}
+chisq.test(aggregate(births ~ day_of_week, workingData, mean)[,c(2)])
+```
+
+<div class='page-header text-uppercase'>
+  <h3>Initial Conclusion</h3>
+</div>
+<div class='well'>
+  <p><span class='lead'>F</span>urther research yielded a perfectly reasonable explanation for my results. Improvements in medical technology have allowed doctors to schedule deliveries in advance and induce labor at the appropriate time. Combine this fact with the fact that doctors are more likely to take the weekends off and this leads to a logical explanation for the data. Doctors take weekends off so they schedule deliveries for the weekdays.</p>
+</div>
+<div class='page-header text-uppercase'>
+  <h3>Growing Trend?</h3>
+</div>
+<div class='well'>
+  <p><span class='lead'>W</span>ith that mystery solved I turned to another apparent fact from visual inspection of the data. It appeared that the discrepency between weekday and weekend births are growing more pronounced as the years went by. Had this trend been growing during the examined time frame?</p>
+  <p>I created 2 functions to aid in created a new data frame that identied the average number of weekday and weekend births by year along with the percent decrease from weekday to weekend.</p>
+</div>
+  
+
+```{r}
+weekDayFunction <- function(data){
+  subData <- data[which(data[,2] %in% 1:5),]
+  sum(subData$births) / nrow(subData)
+}
+
+weekEndFunction <- function(data){
+  subData <- data[which(data[,2] %in% 6:7),]
+  sum(subData$births) / nrow(subData)
+}
+
+ratioData <- ddply(workingData, .variables='year', .fun=c(weekDayFunction,weekEndFunction))
+ratioData <- cbind(ratioData, (ratioData$V1 - ratioData$V2)/ratioData$V1)
+names(ratioData) <- c('year', 'average_weekday', 'average_weekend', 'percent_decrease')
+ratioData
+```
+
+<div class='well'>
+  <p><span class='lead'>I</span> then created a graph plotting each year's percent difference. The regresssion line appears to show a clear growing trend in the difference between the number of weekday births compared to weekend births. I performed a least-square regression analysis.</p>
+</div>
+
+```{r}
+ggplot(ratioData, aes(x=year, y=percent_decrease)) + geom_point(aes(color=percent_decrease)) + scale_color_gradient(low='blue', high='red') +
+  labs(title='Percent Difference in Weekend to Weekday Births (1969-1988)', x='Year', y='Percent Decrease', caption='Data From: http://vincentarelbundock.github.io/Rdatasets/') +
+  theme(legend.position='none') +
+  scale_y_continuous(labels= scales::percent) + 
+  geom_smooth(method='lm')
+```
+
+```{r}
+ratioData$year <- ratioData$year - 1969
+summary(lm(formula = percent_decrease ~ year, data=ratioData))
+```
+
+<div class='page-header text-uppercase'>
+  <h3>Final Conclusion</h3>
+</div>
+$$y=.004408x+0.115902$$
+<div class='well'>
+  <p><span class='lead'>T</span>he least squares regression line above indicates that there is nearly $\frac{1}{2}$ a percent change in the rate of weekday births compared to weekend births every year. With a p-value so small it can safely be concluded that this is a trend.</p>
+</div>
+<div class='alert alert-success'>
+  It can be stated with strong confidence that weekday births have been steadily increasing in the United States in the years 1969 to 1988. It can also be stated with strong confidence that there are statisitcally significantly more babies born during the week than during the weekend.
+</div>
+<div class='well'>
+  <p>Unfortunately, that is as much as can be gleaned from the data. There are a number of follow up questions I would be interested in pursuing:</p>
+    
+</div>
+* Why did the rate of doctors scheduling weekday births increase?
+* Is the rate still increasing or did it level off?
+* What is the predominate cause for weekend births?
+
+
+
+
+
+
+
+
+
